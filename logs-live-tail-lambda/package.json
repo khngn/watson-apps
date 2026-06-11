@@ -1,0 +1,33 @@
+{
+  "name": "logs-live-tail-lambda",
+  "version": "1.0.0",
+  "author": "K",
+  "main": "lambda.js",
+  "description": "",
+  "keywords": [],
+  "license": "ISC",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc --noEmit && esbuild src/logs-live-tail-lambda.ts --bundle --platform=node --target=node22 --sourcemap=inline --minify --outfile=build/lambda.js",
+    "dist": "rimraf dist/lambda.zip && shx mkdir -p dist && cd build && bestzip ../dist/lambda.zip lambda.js",
+    "lint": "eslint src/**/*.ts",
+    "lf": "eslint src/**/*.ts --fix"
+  },
+  "type": "module",
+  "dependencies": {
+    "@aws-lambda-powertools/logger": "^2.33.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1034.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.161",
+    "@types/node": "22.19.17",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "bestzip": "^2.2.3",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.3.0",
+    "rimraf": "^6.1.3",
+    "shx": "^0.4.0",
+    "typescript": "^6.0.3"
+  }
+}
