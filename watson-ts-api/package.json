@@ -1,0 +1,33 @@
+{
+  "name": "watson-ts-api-app",
+  "version": "1.0.0",
+  "author": "K",
+  "main": "index.js",
+  "description": "",
+  "keywords": [],
+  "license": "ISC",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc --noEmit && esbuild src/watson-ts-api-lambda.ts --bundle --platform=node --target=node22 --sourcemap=inline --minify --outfile=build/lambda.js",
+    "dist": "rimraf dist/lambda.zip && shx mkdir -p dist && cd build && bestzip ../dist/lambda.zip lambda.js",
+    "dist:spec": "rimraf dist/openapi.json && shx mkdir -p dist && swagger-cli bundle spec/watson-ts.yaml --type json --outfile dist/openapi.json"
+  },
+  "type": "module",
+  "dependencies": {
+    "@aws-lambda-powertools/logger": "^2.33.0",
+    "@aws-sdk/client-lambda": "^3.1040.0",
+    "@js-joda/core": "^6.0.1",
+    "bun-types": "^1.3.12",
+    "undici-types": "^7.19.2"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-cli": "^4.0.4",
+    "@types/aws-lambda": "^8.10.161",
+    "@types/node": "^25.6.0",
+    "bestzip": "^2.2.3",
+    "esbuild": "^0.28.0",
+    "rimraf": "^6.1.3",
+    "shx": "^0.4.0",
+    "typescript": "^6.0.3"
+  }
+}

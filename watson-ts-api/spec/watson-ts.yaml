@@ -1,0 +1,29 @@
+openapi: 3.0.0
+info:
+  title: KN Watson API
+  description: kn-watson-ts-api
+  version: 1.0.0
+
+tags:
+ - name: main
+   description: Main
+paths:
+  /invoke:
+    post:
+      description: Invoke it
+      operationId: invoke
+      tags:
+        - main
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        default:
+          description: Invoked
+          content:
+            application/json:
+              schema:
+                type: object

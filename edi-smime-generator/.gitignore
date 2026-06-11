@@ -1,0 +1,7 @@
+node_modules
+build
+dist
+dist-generator
+data/**
+edi/*.icr
+**/private.env
