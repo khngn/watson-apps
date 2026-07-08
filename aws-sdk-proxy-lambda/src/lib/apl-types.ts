@@ -1,13 +1,19 @@
-import type { UpdateFunctionCodeCommandInput } from '@aws-sdk/client-lambda';
+import { DecryptCommandInput, DecryptCommandOutput, EncryptCommandInput, EncryptCommandOutput, UpdateAliasCommandOutput } from '@aws-sdk/client-kms/dist-types/commands/index.js';
+import type { ListAliasesCommandOutput, PublishVersionCommandOutput, UpdateFunctionCodeCommandInput, UpdateFunctionCodeCommandOutput } from '@aws-sdk/client-lambda';
 import type {
   CopyObjectCommandInput,
+  CopyObjectCommandOutput,
   DeleteObjectCommandInput,
+  DeleteObjectCommandOutput,
   GetObjectCommandInput,
   HeadObjectCommandOutput,
   PutObjectCommandInput,
   PutObjectCommandOutput,
 } from '@aws-sdk/client-s3';
 
+// ##############################################################
+// Lambda Function
+// ##############################################################
 export interface UpdateFunctionCodeAndVersionRequest {
   UpdateFunctionCodeCommandInput: UpdateFunctionCodeCommandInput,
   waitUntilFunctionUpdated?: {
@@ -23,6 +29,15 @@ export interface UpdateFunctionCodeAndVersionRequest {
   }
 }
 
+export interface UpdateFunctionCodeAndVersionResponse {
+  UpdateFunctionCodeCommandOutput: UpdateFunctionCodeCommandOutput,
+  PublishVersionCommandOutput?: PublishVersionCommandOutput,
+  UpdateAliasCommandOutput?: UpdateAliasCommandOutput,
+}
+
+// ##############################################################
+// S3
+// ##############################################################
 export interface GetS3ObjectRequest {
   GetObjectCommandInput: GetObjectCommandInput,
   // The number of seconds before the presigned URL expires. Defaults to 3600 (1 hour).
@@ -41,6 +56,11 @@ export interface TransferS3ObjectRequest {
   },
 }
 
+export interface TransferS3ObjectResponse {
+  CopyObjectCommandOutput: CopyObjectCommandOutput,
+  DeleteObjectCommandOutput?: DeleteObjectCommandOutput,
+}
+
 export interface PutS3ObjectRequest {
   PutObjectCommandInput: PutObjectCommandInput,
   isBase64Payload?: {
@@ -55,4 +75,35 @@ export interface PutS3ObjectRequest {
 
 export type PutS3ObjectResponse = PutObjectCommandOutput | {
   signedUrl: string,
+}
+
+export function isPutS3ObjectSignedUrlResponse(
+  response: PutS3ObjectResponse,
+): response is { signedUrl: string } {
+  return 'signedUrl' in response && typeof response.signedUrl === 'string';
+}
+
+// ##############################################################
+// KMS
+// ##############################################################
+export interface DecryptKmsRequest {
+  textBase64: string,
+  listKmsKeyAliases?: boolean,
+  DecryptCommandInput?: DecryptCommandInput,
+}
+
+export interface DecryptKmsResponse {
+  decryptedText: string,
+  DecryptCommandOutput: DecryptCommandOutput,
+  ListAliasesCommandOutput?: ListAliasesCommandOutput,
+}
+
+export interface EncryptKmsRequest {
+  text: string,
+  EncryptCommandInput: EncryptCommandInput,
+}
+
+export interface EncryptKmsResponse {
+  encryptedText: string,
+  EncryptCommandOutput: EncryptCommandOutput,
 }

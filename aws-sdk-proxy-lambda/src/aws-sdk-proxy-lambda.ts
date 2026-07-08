@@ -1,4 +1,5 @@
 import { Logger, LogLevel } from '@aws-lambda-powertools/logger';
+import { AthenaClient, StartQueryExecutionCommand, StartQueryExecutionCommandInput } from '@aws-sdk/client-athena';
 import {
   CloudWatchLogsClient, DescribeLogGroupsCommand, DescribeLogGroupsCommandInput,
   FilterLogEventsCommand, FilterLogEventsCommandInput,
@@ -6,8 +7,12 @@ import {
   ListLogGroupsCommand, ListLogGroupsCommandInput, StartQueryCommand, StartQueryCommandInput,
   StopQueryCommand, StopQueryCommandInput,
 } from '@aws-sdk/client-cloudwatch-logs';
+import { DescribeFlowLogsCommand, DescribeFlowLogsCommandInput, DescribeVpcsCommand, DescribeVpcsCommandInput, EC2Client } from '@aws-sdk/client-ec2';
+import { DecryptCommand, DecryptCommandInput, EncryptCommand, EncryptCommandInput, KMSClient, ListAliasesCommand } from '@aws-sdk/client-kms';
 import {
   InvokeCommand, InvokeCommandInput, LambdaClient,
+  ListFunctionsCommand,
+  ListFunctionsCommandInput,
   PublishVersionCommand,
   UpdateAliasCommand,
   UpdateFunctionCodeCommand,
@@ -28,8 +33,13 @@ import { Context, SQSEvent } from 'aws-lambda';
 import { gunzipSync } from 'zlib';
 import { isS3Event, isSQSEvent } from './event-types.js';
 import {
+  DecryptKmsRequest,
+  DecryptKmsResponse,
+  EncryptKmsRequest,
+  EncryptKmsResponse,
   GetS3ObjectRequest, GetS3ObjectResponse, PutS3ObjectRequest, PutS3ObjectResponse,
-  TransferS3ObjectRequest, UpdateFunctionCodeAndVersionRequest
+  TransferS3ObjectRequest, TransferS3ObjectResponse, UpdateFunctionCodeAndVersionRequest,
+  UpdateFunctionCodeAndVersionResponse
 } from './lib/apl-types.js';
 import { mapError, parseAsJson } from './utils.js';
 
@@ -47,6 +57,7 @@ interface SdkCommandEvent {
   StopQueryCommandInput?: StopQueryCommandInput,
   GetQueryResultsCommandInput?: GetQueryResultsCommandInput,
   // Lambda
+  ListFunctionsCommandInput?: ListFunctionsCommandInput,
   InvokeCommandInput?: InvokeCommandInput,
   UpdateFunctionCodeAndVersionRequest?: UpdateFunctionCodeAndVersionRequest,
   // S3
@@ -61,6 +72,14 @@ interface SdkCommandEvent {
   TransferS3ObjectRequests?: TransferS3ObjectRequest[],
   DeleteObjectCommandInput?: DeleteObjectCommandInput,
   DeleteObjectsCommandInput?: DeleteObjectsCommandInput,
+  // EC2
+  DescribeVpcsCommandInput?: DescribeVpcsCommandInput,
+  DescribeFlowLogsCommandInput?: DescribeFlowLogsCommandInput,
+  // Athena
+  StartQueryExecutionCommandInput?: StartQueryExecutionCommandInput,
+  // KMS
+  DecryptKmsRequest?: DecryptKmsRequest,
+  EncryptKmsRequest?: EncryptKmsRequest,
 }
 
 // ################################################################################
@@ -74,13 +93,22 @@ const getLambdaClient = (): LambdaClient => (lambdaClient ??= new LambdaClient()
 let s3Client: S3Client | undefined;
 const getS3Client = (): S3Client => (s3Client ??= new S3Client());
 
+let ec2Client: EC2Client | undefined;
+const getEc2Client = (): EC2Client => (ec2Client ??= new EC2Client());
+
+let athenaClient: AthenaClient | undefined;
+const getAthenaClient = (): AthenaClient => (athenaClient ??= new AthenaClient());
+
+let kmsClient: KMSClient | undefined;
+const getKmsClient = (): KMSClient => (kmsClient ??= new KMSClient());
+
 // ################################################################################
 export const handler = async (
   event: SdkCommandEvent | SQSEvent,
-  context: Context
+  // context: Context
 ) => {
   // logger.info('Environment variables', { env: process.env });
-  logger.info('Received Event', { event: event, context: context });
+  // logger.info('Received Event', { event: event, context: context });
 
   if (isSQSEvent(event)) {
     return await handleSQSEvent(event);
@@ -128,6 +156,9 @@ const handleSdkCommandEvent = async (
     logger.info('Sending GetQueryResultsCommand', { GetQueryResultsCommandInput: event.GetQueryResultsCommandInput });
     return await getCloudWatchLogsClient().send(new GetQueryResultsCommand(event.GetQueryResultsCommandInput));
     // Lambda
+  } else if (event.ListFunctionsCommandInput) {
+    logger.info('Sending ListFunctionsCommand', { ListFunctionsCommandInput: event.ListFunctionsCommandInput });
+    return await getLambdaClient().send(new ListFunctionsCommand(event.ListFunctionsCommandInput));
   } else if (event.InvokeCommandInput) {
     logger.info('Sending InvokeCommand', { InvokeCommandInput: event.InvokeCommandInput });
     const output = await getLambdaClient().send(new InvokeCommand(event.InvokeCommandInput));
@@ -138,7 +169,7 @@ const handleSdkCommandEvent = async (
     };
   } else if (event.UpdateFunctionCodeAndVersionRequest) {
     return await updateFunctionCode(event.UpdateFunctionCodeAndVersionRequest);
-    // S3
+  // S3
   } else if (event.ListBucketsCommandInput) {
     logger.info('Sending ListBucketsCommand', { ListBucketsCommandInput: event.ListBucketsCommandInput });
     return await getS3Client().send(new ListBucketsCommand(event.ListBucketsCommandInput));
@@ -168,17 +199,55 @@ const handleSdkCommandEvent = async (
   } else if (event.DeleteObjectsCommandInput) {
     logger.info('Sending DeleteObjectsCommand', { DeleteObjectsCommandInput: event.DeleteObjectsCommandInput });
     return await getS3Client().send(new DeleteObjectsCommand(event.DeleteObjectsCommandInput));
+  // EC2
+  } else if (event.DescribeVpcsCommandInput) {
+    logger.info('Sending DescribeVpcsCommand', { DescribeVpcsCommandInput: event.DescribeVpcsCommandInput });
+    return await getEc2Client().send(new DescribeVpcsCommand(event.DescribeVpcsCommandInput));
+  } else if (event.DescribeFlowLogsCommandInput) {
+    logger.info('Sending DescribeFlowLogsCommand', { DescribeFlowLogsCommandInput: event.DescribeFlowLogsCommandInput });
+    return await getEc2Client().send(new DescribeFlowLogsCommand(event.DescribeFlowLogsCommandInput));
+  // Athena
+  } else if (event.StartQueryExecutionCommandInput) {
+    logger.info('Sending StartQueryExecutionCommand', { StartQueryExecutionCommandInput: event.StartQueryExecutionCommandInput });
+    return await getAthenaClient().send(new StartQueryExecutionCommand(event.StartQueryExecutionCommandInput));
+  // KMS
+  } else if (event.DecryptKmsRequest) {
+    const input: DecryptCommandInput = {
+      ...event.DecryptKmsRequest.DecryptCommandInput,
+      CiphertextBlob: Buffer.from(event.DecryptKmsRequest.textBase64, 'base64'),
+    };    
+    const output = await getKmsClient().send(new DecryptCommand(input));
+    const response: DecryptKmsResponse = {
+      decryptedText: output.Plaintext ? Buffer.from(output.Plaintext).toString('utf-8') : '',
+      DecryptCommandOutput: output,
+      // Optional extra
+      ...(event.DecryptKmsRequest.listKmsKeyAliases && output.KeyId ? {
+        ListAliasesCommandOutput: await getKmsClient().send(new ListAliasesCommand({ KeyId: output.KeyId })),
+      } : {}),
+    };
+    return response;
+  } else if (event.EncryptKmsRequest) {
+    const input: EncryptCommandInput = {
+      ...event.EncryptKmsRequest.EncryptCommandInput,
+      Plaintext: Buffer.from(event.EncryptKmsRequest.text, 'utf-8'),
+    };
+    const output = await getKmsClient().send(new EncryptCommand(input));
+    const response: EncryptKmsResponse = {
+      encryptedText: output.CiphertextBlob ? Buffer.from(output.CiphertextBlob).toString('base64') : '',
+      EncryptCommandOutput: output,
+    };
+    return response;
   }
   // No valid command found in the event
   throw new Error('No parameter provided in the aws-sdk-proxy-lambda event.');
 };
 
 // ################################################################################
-const updateFunctionCode = async (request: UpdateFunctionCodeAndVersionRequest) => {
+const updateFunctionCode = async (request: UpdateFunctionCodeAndVersionRequest): Promise<UpdateFunctionCodeAndVersionResponse> => {
   const lambdaClient = getLambdaClient();
   logger.info('Sending UpdateFunctionCodeCommand', { UpdateFunctionCodeCommandInput: request.UpdateFunctionCodeCommandInput });
   const updateOutput = await lambdaClient.send(new UpdateFunctionCodeCommand(request.UpdateFunctionCodeCommandInput));
-  const response: Record<string, unknown> = {
+  const response: UpdateFunctionCodeAndVersionResponse = {
     UpdateFunctionCodeCommandOutput: updateOutput,
   };
   if (request.waitUntilFunctionUpdated && updateOutput.FunctionName) {
@@ -232,7 +301,7 @@ const putS3Objects = async (requests: PutS3ObjectRequest[]): Promise<PutS3Object
 }
 
 const getS3Object = async (request: GetS3ObjectRequest): Promise<GetS3ObjectResponse> => {
-  logger.info('Executing GetS3ObjectRequest', { GetS3ObjectRequest: request });
+
   const getHeadObject = async (input: HeadObjectCommandInput): Promise<HeadObjectCommandOutput> => {
     logger.info('Sending HeadObjectCommand', { input });
     return await getS3Client().send(new HeadObjectCommand(input));
@@ -253,7 +322,7 @@ const getS3Object = async (request: GetS3ObjectRequest): Promise<GetS3ObjectResp
 const transferS3Objects = async (requests: TransferS3ObjectRequest[]) => {
   const total = requests.length;
   logger.info('Executing TransferS3ObjectRequests', { total: total });
-  return (await Promise.allSettled(requests.map(async (request, index) => {
+  return (await Promise.allSettled(requests.map(async (request, index): Promise<TransferS3ObjectResponse> => {
     logger.info(`Sending TransferS3ObjectRequests.CopyObjectCommand[${index + 1}/${total}]`, { CopyObjectCommandInput: request.CopyObjectCommandInput });
     const copyOutput = await getS3Client().send(new CopyObjectCommand(request.CopyObjectCommandInput));
     let optionsOutput = {};
