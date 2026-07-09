@@ -1,5 +1,14 @@
 import { Logger, LogLevel } from '@aws-lambda-powertools/logger';
-import { AthenaClient, StartQueryExecutionCommand, StartQueryExecutionCommandInput } from '@aws-sdk/client-athena';
+import {
+  GetQueryExecutionCommand as AthenaGetQueryExecutionCommand,
+  GetQueryExecutionCommandInput as AthenaGetQueryExecutionCommandInput,
+  StartQueryExecutionCommand as AthenaStartQueryExecutionCommand,
+  StartQueryExecutionCommandInput as AthenaStartQueryExecutionCommandInput,
+  GetQueryResultsCommand as AthenaGetQueryResultsCommand,
+  GetQueryResultsCommandInput as AthenaGetQueryResultsCommandInput,
+  GetQueryResultsCommandOutput as AthenaGetQueryResultsCommandOutput,
+  AthenaClient,
+} from '@aws-sdk/client-athena';
 import {
   CloudWatchLogsClient, DescribeLogGroupsCommand, DescribeLogGroupsCommandInput,
   FilterLogEventsCommand, FilterLogEventsCommandInput,
@@ -29,7 +38,7 @@ import {
   S3Client
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { Context, SQSEvent } from 'aws-lambda';
+import { SQSEvent } from 'aws-lambda';
 import { gunzipSync } from 'zlib';
 import { isS3Event, isSQSEvent } from './event-types.js';
 import {
@@ -76,7 +85,9 @@ interface SdkCommandEvent {
   DescribeVpcsCommandInput?: DescribeVpcsCommandInput,
   DescribeFlowLogsCommandInput?: DescribeFlowLogsCommandInput,
   // Athena
-  StartQueryExecutionCommandInput?: StartQueryExecutionCommandInput,
+  AthenaStartQueryExecutionCommandInput?: AthenaStartQueryExecutionCommandInput,
+  AthenaGetQueryExecutionCommandInput?: AthenaGetQueryExecutionCommandInput,
+  AthenaGetQueryResultsCommandInput?: AthenaGetQueryResultsCommandInput,
   // KMS
   DecryptKmsRequest?: DecryptKmsRequest,
   EncryptKmsRequest?: EncryptKmsRequest,
@@ -110,16 +121,17 @@ export const handler = async (
   // logger.info('Environment variables', { env: process.env });
   // logger.info('Received Event', { event: event, context: context });
 
-  if (isSQSEvent(event)) {
-    return await handleSQSEvent(event);
-  } else {
-    try {
+  try {
+    if (isSQSEvent(event)) {
+      return await handleSQSEvent(event);
+    } else {
       return await handleSdkCommandEvent(event);
-    } catch (error) {
-      logger.error('Error handleSdkCommandEvent', { ERROR: error });
-      throw error;
     }
+  } catch (error) {
+    logger.error('Error handling event', { ERROR: error });
+    throw error;
   }
+
 };
 
 const handleSQSEvent = async (event: SQSEvent) => {
@@ -169,7 +181,7 @@ const handleSdkCommandEvent = async (
     };
   } else if (event.UpdateFunctionCodeAndVersionRequest) {
     return await updateFunctionCode(event.UpdateFunctionCodeAndVersionRequest);
-  // S3
+    // S3
   } else if (event.ListBucketsCommandInput) {
     logger.info('Sending ListBucketsCommand', { ListBucketsCommandInput: event.ListBucketsCommandInput });
     return await getS3Client().send(new ListBucketsCommand(event.ListBucketsCommandInput));
@@ -199,23 +211,29 @@ const handleSdkCommandEvent = async (
   } else if (event.DeleteObjectsCommandInput) {
     logger.info('Sending DeleteObjectsCommand', { DeleteObjectsCommandInput: event.DeleteObjectsCommandInput });
     return await getS3Client().send(new DeleteObjectsCommand(event.DeleteObjectsCommandInput));
-  // EC2
+    // EC2
   } else if (event.DescribeVpcsCommandInput) {
     logger.info('Sending DescribeVpcsCommand', { DescribeVpcsCommandInput: event.DescribeVpcsCommandInput });
     return await getEc2Client().send(new DescribeVpcsCommand(event.DescribeVpcsCommandInput));
   } else if (event.DescribeFlowLogsCommandInput) {
     logger.info('Sending DescribeFlowLogsCommand', { DescribeFlowLogsCommandInput: event.DescribeFlowLogsCommandInput });
     return await getEc2Client().send(new DescribeFlowLogsCommand(event.DescribeFlowLogsCommandInput));
-  // Athena
-  } else if (event.StartQueryExecutionCommandInput) {
-    logger.info('Sending StartQueryExecutionCommand', { StartQueryExecutionCommandInput: event.StartQueryExecutionCommandInput });
-    return await getAthenaClient().send(new StartQueryExecutionCommand(event.StartQueryExecutionCommandInput));
-  // KMS
+    // Athena
+  } else if (event.AthenaStartQueryExecutionCommandInput) {
+    logger.info('Sending StartQueryExecutionCommand', { AthenaStartQueryExecutionCommandInput: event.AthenaStartQueryExecutionCommandInput });
+    return await getAthenaClient().send(new AthenaStartQueryExecutionCommand(event.AthenaStartQueryExecutionCommandInput));
+  } else if (event.AthenaGetQueryExecutionCommandInput) {
+    logger.info('Sending GetQueryExecutionCommand', { AthenaGetQueryExecutionCommandInput: event.AthenaGetQueryExecutionCommandInput });
+    return await getAthenaClient().send(new AthenaGetQueryExecutionCommand(event.AthenaGetQueryExecutionCommandInput));
+  } else if (event.AthenaGetQueryResultsCommandInput) {
+    logger.info('Sending GetQueryResultsCommand', { AthenaGetQueryResultsCommandInput: event.AthenaGetQueryResultsCommandInput });
+    return await getAthenaClient().send(new AthenaGetQueryResultsCommand(event.AthenaGetQueryResultsCommandInput));
+    // KMS
   } else if (event.DecryptKmsRequest) {
     const input: DecryptCommandInput = {
       ...event.DecryptKmsRequest.DecryptCommandInput,
       CiphertextBlob: Buffer.from(event.DecryptKmsRequest.textBase64, 'base64'),
-    };    
+    };
     const output = await getKmsClient().send(new DecryptCommand(input));
     const response: DecryptKmsResponse = {
       decryptedText: output.Plaintext ? Buffer.from(output.Plaintext).toString('utf-8') : '',
