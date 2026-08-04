@@ -172,6 +172,9 @@ const handleSdkCommandEvent = async (
     logger.info('Sending ListFunctionsCommand', { ListFunctionsCommandInput: event.ListFunctionsCommandInput });
     return await getLambdaClient().send(new ListFunctionsCommand(event.ListFunctionsCommandInput));
   } else if (event.InvokeCommandInput) {
+    if (event.InvokeCommandInput.Payload && typeof event.InvokeCommandInput.Payload !== 'string') {
+      event.InvokeCommandInput.Payload = JSON.stringify(event.InvokeCommandInput.Payload);
+    }
     logger.info('Sending InvokeCommand', { InvokeCommandInput: event.InvokeCommandInput });
     const output = await getLambdaClient().send(new InvokeCommand(event.InvokeCommandInput));
     return {
