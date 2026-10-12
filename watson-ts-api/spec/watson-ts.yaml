@@ -27,3 +27,71 @@ paths:
             application/json:
               schema:
                 type: object
+  /proxy/{proxy+}:
+    parameters:
+      - name: proxy
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      description: Proxy it
+      operationId: proxy
+      tags:
+        - main
+      responses:
+        default:
+          description: Proxied
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      description: Proxy it
+      operationId: proxy
+      tags:
+        - main
+      responses:
+        default:
+          description: Proxied
+          content:
+            application/json:
+              schema:
+                type: object
+    put:
+      description: Proxy it
+      operationId: proxy
+      tags:
+        - main
+      responses:
+        default:
+          description: Proxied
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      description: Proxy it
+      operationId: proxy
+      tags:
+        - main
+      responses:
+        default:
+          description: Proxied
+          content:
+            application/json:
+              schema:
+                type: object
+    head:
+      description: Proxy it
+      operationId: proxy
+      tags:
+        - main
+      responses:
+        default:
+          description: Proxied
+          content:
+            application/json:
+              schema:
+                type: object
+    

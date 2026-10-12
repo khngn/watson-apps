@@ -70,18 +70,10 @@ const mapError = (error: unknown): object => {
     return {
       errorType: error.name,
       errorMessage: error.message,
-      stack: error.stack?.split('\n'),
+      stack: error.stack?.split('\n') ?? [],
+      cause: error.cause ? mapError(error.cause) : undefined,
     };
   }
 
-  return {
-    errorType: 'UnknownError',
-    errorMessage: (() => {
-      try {
-        return JSON.stringify(error);
-      } catch {
-        return String(error);
-      }
-    })(),
-  };
+  return mapError(new Error('Unexpected Error', { cause: error }));
 };

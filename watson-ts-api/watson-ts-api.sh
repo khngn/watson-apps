@@ -7,7 +7,7 @@ lambda() {(
   set -euo pipefail
   # #############################################################
   cd "$thisDir"
-  bun run build && bun run dist
+  bun run build && bun run dist && bun run dist:spec
   # #############################################################
   aws_load_profile
   aws s3 sync "$thisDir/dist/" "s3://$KN_CBS_BUCKET/apps/$app/dist/" --delete

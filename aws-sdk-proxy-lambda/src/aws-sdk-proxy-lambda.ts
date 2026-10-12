@@ -1,13 +1,12 @@
 import { Logger, LogLevel } from '@aws-lambda-powertools/logger';
 import {
+  AthenaClient,
   GetQueryExecutionCommand as AthenaGetQueryExecutionCommand,
   GetQueryExecutionCommandInput as AthenaGetQueryExecutionCommandInput,
-  StartQueryExecutionCommand as AthenaStartQueryExecutionCommand,
-  StartQueryExecutionCommandInput as AthenaStartQueryExecutionCommandInput,
   GetQueryResultsCommand as AthenaGetQueryResultsCommand,
   GetQueryResultsCommandInput as AthenaGetQueryResultsCommandInput,
-  GetQueryResultsCommandOutput as AthenaGetQueryResultsCommandOutput,
-  AthenaClient,
+  StartQueryExecutionCommand as AthenaStartQueryExecutionCommand,
+  StartQueryExecutionCommandInput as AthenaStartQueryExecutionCommandInput
 } from '@aws-sdk/client-athena';
 import {
   CloudWatchLogsClient, DescribeLogGroupsCommand, DescribeLogGroupsCommandInput,
@@ -19,12 +18,16 @@ import {
 import { DescribeFlowLogsCommand, DescribeFlowLogsCommandInput, DescribeVpcsCommand, DescribeVpcsCommandInput, EC2Client } from '@aws-sdk/client-ec2';
 import { DecryptCommand, DecryptCommandInput, EncryptCommand, EncryptCommandInput, KMSClient, ListAliasesCommand } from '@aws-sdk/client-kms';
 import {
+  GetFunctionConfigurationCommand,
+  GetFunctionConfigurationCommandInput,
   InvokeCommand, InvokeCommandInput, LambdaClient,
   ListFunctionsCommand,
   ListFunctionsCommandInput,
   PublishVersionCommand,
   UpdateAliasCommand,
   UpdateFunctionCodeCommand,
+  UpdateFunctionConfigurationCommand,
+  UpdateFunctionConfigurationCommandInput,
   waitUntilFunctionUpdatedV2
 } from '@aws-sdk/client-lambda';
 import {
@@ -69,6 +72,8 @@ interface SdkCommandEvent {
   ListFunctionsCommandInput?: ListFunctionsCommandInput,
   InvokeCommandInput?: InvokeCommandInput,
   UpdateFunctionCodeAndVersionRequest?: UpdateFunctionCodeAndVersionRequest,
+  GetFunctionConfigurationCommandInput?: GetFunctionConfigurationCommandInput,
+  UpdateFunctionConfigurationCommandInput?: UpdateFunctionConfigurationCommandInput,
   // S3
   ListBucketsCommandInput?: ListBucketsCommandInput,
   HeadBucketCommandInput?: HeadBucketCommandInput,
@@ -124,9 +129,8 @@ export const handler = async (
   try {
     if (isSQSEvent(event)) {
       return await handleSQSEvent(event);
-    } else {
-      return await handleSdkCommandEvent(event);
     }
+    return await handleSdkCommandEvent(event);
   } catch (error) {
     logger.error('Error handling event', { ERROR: error });
     throw error;
@@ -184,6 +188,12 @@ const handleSdkCommandEvent = async (
     };
   } else if (event.UpdateFunctionCodeAndVersionRequest) {
     return await updateFunctionCode(event.UpdateFunctionCodeAndVersionRequest);
+  } else if (event.GetFunctionConfigurationCommandInput) {
+    logger.info('Sending GetFunctionConfigurationCommand', { GetFunctionConfigurationCommandInput: event.GetFunctionConfigurationCommandInput });
+    return await getLambdaClient().send(new GetFunctionConfigurationCommand(event.GetFunctionConfigurationCommandInput));
+  } else if (event.UpdateFunctionConfigurationCommandInput) {
+    logger.info('Sending UpdateFunctionConfigurationCommand', { UpdateFunctionConfigurationCommandInput: event.UpdateFunctionConfigurationCommandInput });
+    return await getLambdaClient().send(new UpdateFunctionConfigurationCommand(event.UpdateFunctionConfigurationCommandInput));
     // S3
   } else if (event.ListBucketsCommandInput) {
     logger.info('Sending ListBucketsCommand', { ListBucketsCommandInput: event.ListBucketsCommandInput });
